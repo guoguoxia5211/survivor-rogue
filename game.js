@@ -99,7 +99,8 @@ class Projectile {
         this.y += this.vy;
         this.life--;
         
-        if (this.x < 0 || this.x > game.width || this.y < 0 || this.y > game.height || this.life <= 0) {
+        // 寿命结束就消失
+        if (this.life <= 0) {
             this.active = false;
         }
     }
@@ -280,8 +281,10 @@ class Game {
         document.getElementById('gameOverScreen').style.display = 'none';
         document.getElementById('levelUp').style.display = 'none';
         
-        this.lastAttack = {};
+        this.lastAttack = { magic_missile: 0 };
         this.lastRegen = Date.now();
+        
+        console.log('游戏启动！技能:', this.skills);
         
         requestAnimationFrame(this.loop);
     }
@@ -308,17 +311,18 @@ class Game {
     
     findNearestEnemy(x, y) {
         let nearest = null;
-        let minDist = Infinity;
+        let minDist = 500 * 500; // 500 像素内
         
         for (let enemy of this.enemies) {
             const dx = enemy.x - x;
             const dy = enemy.y - y;
             const dist = dx * dx + dy * dy;
-            if (dist < minDist && dist < 400 * 400) { // 400 像素内
+            if (dist < minDist) {
                 minDist = dist;
                 nearest = enemy;
             }
         }
+        
         return nearest;
     }
     
@@ -329,6 +333,9 @@ class Game {
         const now = Date.now();
         const lastAttackTime = this.lastAttack[skillId] || 0;
         const cooldown = (skill.cooldown / this.player.attackSpeedMultiplier) * 16.67;
+        
+        // 调试输出
+        // console.log('攻击检查:', skillId, '冷却:', cooldown, '经过:', now - lastAttackTime);
         
         if (now - lastAttackTime < cooldown) return;
         this.lastAttack[skillId] = now;
@@ -342,6 +349,7 @@ class Game {
                 const target = this.findNearestEnemy(playerWorldX, playerWorldY);
                 if (target) {
                     const count = (skill.count || 1) + (this.passives.projectile_up || 0);
+                    // console.log('发现目标，发射', count, '个子弹');
                     for (let i = 0; i < count; i++) {
                         const angle = Math.atan2(target.y - playerWorldY, target.x - playerWorldX) + (i - (count-1)/2) * 0.15;
                         this.projectiles.push(new Projectile(
@@ -351,6 +359,8 @@ class Game {
                             damage, 'magic', { pierce: skill.pierce || 1 }
                         ));
                     }
+                } else {
+                    // console.log('没有找到目标');
                 }
                 break;
                 
@@ -484,7 +494,11 @@ class Game {
         }
         
         // 自动攻击 - 使用世界坐标
-        this.skills.forEach(skillId => this.attack(skillId));
+        const now = Date.now();
+        this.skills.forEach(skillId => {
+            // 每帧都检查攻击
+            this.attack(skillId);
+        });
         
         // 生命恢复
         if (this.player.regen > 0 && Date.now() - this.lastRegen >= 1000) {
