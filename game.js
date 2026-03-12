@@ -288,19 +288,19 @@ class Game {
     
     spawnEnemy() {
         const elapsed = (Date.now() - this.startTime) / 1000;
-        const spawnRate = Math.max(15, 50 - elapsed * 1.5);
+        const spawnRate = Math.max(20, 60 - elapsed * 2);
         
         if (Math.random() < 1 / spawnRate) {
-            // 在世界坐标中生成，围绕玩家
+            // 在屏幕外生成，围绕玩家
             const angle = Math.random() * Math.PI * 2;
-            const distance = Math.max(this.width, this.height) / 2 + 50 + Math.random() * 100;
+            const distance = Math.max(this.width, this.height) / 2 + 80;
             
             const worldX = this.worldX + Math.cos(angle) * distance;
             const worldY = this.worldY + Math.sin(angle) * distance;
             
             let type = 'basic';
             if (elapsed > 120 && Math.random() < 0.05) type = 'boss';
-            else if (elapsed > 60 && Math.random() < 0.25) type = Math.random() < 0.5 ? 'fast' : 'tank';
+            else if (elapsed > 60 && Math.random() < 0.2) type = Math.random() < 0.5 ? 'fast' : 'tank';
             
             this.enemies.push(new Enemy(worldX, worldY, type));
         }
@@ -314,7 +314,7 @@ class Game {
             const dx = enemy.x - x;
             const dy = enemy.y - y;
             const dist = dx * dx + dy * dy;
-            if (dist < minDist) {
+            if (dist < minDist && dist < 400 * 400) { // 400 像素内
                 minDist = dist;
                 nearest = enemy;
             }
@@ -333,31 +333,33 @@ class Game {
         if (now - lastAttackTime < cooldown) return;
         this.lastAttack[skillId] = now;
         
+        // 使用世界坐标攻击
+        const playerWorldX = this.worldX;
+        const playerWorldY = this.worldY;
+        
         switch(skillId) {
             case 'magic_missile':
-                const target = this.findNearestEnemy(this.player.x, this.player.y);
+                const target = this.findNearestEnemy(playerWorldX, playerWorldY);
                 if (target) {
                     const count = (skill.count || 1) + (this.passives.projectile_up || 0);
                     for (let i = 0; i < count; i++) {
-                        setTimeout(() => {
-                            const angle = Math.atan2(target.y - this.player.y, target.x - this.player.x) + (i - (count-1)/2) * 0.15;
-                            this.projectiles.push(new Projectile(
-                                this.player.x, this.player.y,
-                                Math.cos(angle) * skill.speed,
-                                Math.sin(angle) * skill.speed,
-                                damage, 'magic', { pierce: skill.pierce || 1 }
-                            ));
-                        }, i * 80);
+                        const angle = Math.atan2(target.y - playerWorldY, target.x - playerWorldX) + (i - (count-1)/2) * 0.15;
+                        this.projectiles.push(new Projectile(
+                            playerWorldX, playerWorldY,
+                            Math.cos(angle) * skill.speed,
+                            Math.sin(angle) * skill.speed,
+                            damage, 'magic', { pierce: skill.pierce || 1 }
+                        ));
                     }
                 }
                 break;
                 
             case 'fireball':
-                const fbTarget = this.findNearestEnemy(this.player.x, this.player.y);
+                const fbTarget = this.findNearestEnemy(playerWorldX, playerWorldY);
                 if (fbTarget) {
-                    const angle = Math.atan2(fbTarget.y - this.player.y, fbTarget.x - this.player.x);
+                    const angle = Math.atan2(fbTarget.y - playerWorldY, fbTarget.x - playerWorldX);
                     this.projectiles.push(new Projectile(
-                        this.player.x, this.player.y,
+                        playerWorldX, playerWorldY,
                         Math.cos(angle) * skill.speed,
                         Math.sin(angle) * skill.speed,
                         damage, 'fireball', { explosion: skill.explosion * (this.passives.area_up || 1) }
@@ -366,24 +368,30 @@ class Game {
                 break;
                 
             case 'lightning':
-                const targets = this.enemies.slice(0, skill.chain || 4);
-                targets.forEach((enemy, i) => {
+                // 找最近的几个敌人
+                const nearby = this.enemies
+                    .filter(e => {
+                        const dx = e.x - playerWorldX;
+                        const dy = e.y - playerWorldY;
+                        return Math.sqrt(dx*dx + dy*dy) < 300;
+                    })
+                    .slice(0, skill.chain || 4);
+                nearby.forEach((enemy, i) => {
                     setTimeout(() => {
                         enemy.takeDamage(damage);
                         this.showDamageNumber(enemy.x, enemy.y, Math.floor(damage));
-                    }, i * 100);
+                    }, i * 80);
                 });
                 break;
                 
             case 'aura':
                 const radius = skill.radius * (this.passives.area_up || 1);
                 this.enemies.forEach(enemy => {
-                    const dx = enemy.x - this.player.x;
-                    const dy = enemy.y - this.player.y;
+                    const dx = enemy.x - playerWorldX;
+                    const dy = enemy.y - playerWorldY;
                     const dist = Math.sqrt(dx * dx + dy * dy);
                     if (dist <= radius) {
                         enemy.takeDamage(damage);
-                        this.showDamageNumber(enemy.x, enemy.y, Math.floor(damage));
                     }
                 });
                 break;
@@ -499,7 +507,7 @@ class Game {
                 enemy.y += (dy / dist) * enemy.speed;
             }
             
-            // 检测碰撞
+            // 检测碰撞（玩家在世界坐标的位置）
             if (dist < enemy.radius + this.player.radius) {
                 let damage = enemy.damage * (1 - this.player.damageReduction);
                 this.player.hp -= damage;
@@ -591,17 +599,14 @@ class Game {
         const mins = Math.floor(elapsed / 60);
         const secs = elapsed % 60;
         document.getElementById('time').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
-        document.getElementById('kills').textContent = this.kills;
         
         const expPct = (this.exp / this.expToNext) * 100;
         document.getElementById('expFill').style.width = expPct + '%';
         document.getElementById('expText').textContent = `${this.exp}/${this.expToNext}`;
         
-        // 显示移动距离
+        // 显示击杀和距离
         const distanceMeters = Math.floor(this.distance / 10);
-        if (distanceMeters > 0) {
-            document.getElementById('kills').textContent = `${this.kills} | ${distanceMeters}m`;
-        }
+        document.getElementById('kills').textContent = `${this.kills}杀 ${distanceMeters}m`;
     }
     
     endGame() {
@@ -628,15 +633,13 @@ class Game {
         this.ctx.fillStyle = '#1a1a2e';
         this.ctx.fillRect(0, 0, this.width, this.height);
         
-        // 绘制移动网格（显示移动感）
-        const gridOffset = (this.worldX + this.worldY) % 40;
-        this.ctx.strokeStyle = '#2a2a4e';
-        this.ctx.lineWidth = 1;
-        for (let x = gridOffset; x < this.width; x += 40) {
-            this.ctx.beginPath(); this.ctx.moveTo(x, 0); this.ctx.lineTo(x, this.height); this.ctx.stroke();
-        }
-        for (let y = gridOffset; y < this.height; y += 40) {
-            this.ctx.beginPath(); this.ctx.moveTo(0, y); this.ctx.lineTo(this.width, y); this.ctx.stroke();
+        // 简单背景，不要网格（避免眩晕）
+        // 只画一些稀疏的装饰点
+        this.ctx.fillStyle = '#2a2a4e';
+        for (let i = 0; i < 20; i++) {
+            const x = ((i * 137 + this.worldX * 0.1) % this.width);
+            const y = ((i * 243 + this.worldY * 0.1) % this.height);
+            this.ctx.fillRect(x, y, 2, 2);
         }
         
         // 绘制实体 - 转换为屏幕坐标
@@ -644,7 +647,7 @@ class Game {
         this.ctx.translate(this.width/2 - this.worldX, this.height/2 - this.worldY);
         
         // 只绘制屏幕内的实体（优化）
-        const viewMargin = 100;
+        const viewMargin = 150;
         const minX = this.worldX - this.width/2 - viewMargin;
         const maxX = this.worldX + this.width/2 + viewMargin;
         const minY = this.worldY - this.height/2 - viewMargin;
