@@ -88,7 +88,7 @@ class Projectile {
         this.damage = damage;
         this.type = type;
         this.extra = extra;
-        this.radius = type === 'fireball' ? 10 : 5;
+        this.radius = type === 'fireball' ? 12 : 8;
         this.active = true;
         this.hitCount = 0;
         this.life = 300;
@@ -108,8 +108,11 @@ class Projectile {
     draw(ctx) {
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.fillStyle = this.type === 'fireball' ? '#FF5722' : this.type === 'lightning' ? '#2196F3' : '#4CAF50';
+        ctx.fillStyle = this.type === 'fireball' ? '#FF5722' : '#FFFF00'; // 黄色更显眼
         ctx.fill();
+        ctx.strokeStyle = '#FFF';
+        ctx.lineWidth = 2;
+        ctx.stroke();
     }
 }
 
@@ -334,13 +337,9 @@ class Game {
         const lastAttackTime = this.lastAttack[skillId] || 0;
         const cooldown = (skill.cooldown / this.player.attackSpeedMultiplier) * 16.67;
         
-        // 调试输出
-        // console.log('攻击检查:', skillId, '冷却:', cooldown, '经过:', now - lastAttackTime);
-        
         if (now - lastAttackTime < cooldown) return;
         this.lastAttack[skillId] = now;
         
-        // 使用世界坐标攻击
         const playerWorldX = this.worldX;
         const playerWorldY = this.worldY;
         
@@ -349,7 +348,6 @@ class Game {
                 const target = this.findNearestEnemy(playerWorldX, playerWorldY);
                 if (target) {
                     const count = (skill.count || 1) + (this.passives.projectile_up || 0);
-                    // console.log('发现目标，发射', count, '个子弹');
                     for (let i = 0; i < count; i++) {
                         const angle = Math.atan2(target.y - playerWorldY, target.x - playerWorldX) + (i - (count-1)/2) * 0.15;
                         this.projectiles.push(new Projectile(
@@ -360,7 +358,14 @@ class Game {
                         ));
                     }
                 } else {
-                    // console.log('没有找到目标');
+                    // 没有敌人时也发射，让玩家看到子弹
+                    const angle = Math.random() * Math.PI * 2;
+                    this.projectiles.push(new Projectile(
+                        playerWorldX, playerWorldY,
+                        Math.cos(angle) * skill.speed,
+                        Math.sin(angle) * skill.speed,
+                        damage, 'magic', { pierce: skill.pierce || 1 }
+                    ));
                 }
                 break;
                 
@@ -608,6 +613,7 @@ class Game {
     updateUI() {
         document.getElementById('hp').textContent = Math.floor(this.player.hp);
         document.getElementById('level').textContent = this.level;
+        document.getElementById('enemies').textContent = this.enemies.length;
         
         const elapsed = Math.floor((Date.now() - this.startTime) / 1000);
         const mins = Math.floor(elapsed / 60);
@@ -618,7 +624,6 @@ class Game {
         document.getElementById('expFill').style.width = expPct + '%';
         document.getElementById('expText').textContent = `${this.exp}/${this.expToNext}`;
         
-        // 显示击杀和距离
         const distanceMeters = Math.floor(this.distance / 10);
         document.getElementById('kills').textContent = `${this.kills}杀 ${distanceMeters}m`;
     }
