@@ -447,32 +447,39 @@ class Game {
         }
         
         // 绘制实体（世界坐标转屏幕坐标）
-        this.ctx.save();
-        this.ctx.translate(this.canvas.width/2 - this.worldX, this.canvas.height/2 - this.worldY);
+        // 屏幕坐标 = 世界坐标 - 世界偏移 + 屏幕中心
+        const screenCX = this.canvas.width / 2;
+        const screenCY = this.canvas.height / 2;
         
         const margin = 150;
-        const minX = this.worldX - this.canvas.width/2 - margin;
-        const maxX = this.worldX + this.canvas.width/2 + margin;
-        const minY = this.worldY - this.canvas.height/2 - margin;
-        const maxY = this.worldY + this.canvas.height/2 + margin;
         
         this.gems.forEach(g => {
-            if (g.x >= minX && g.x <= maxX && g.y >= minY && g.y <= maxY) g.draw(this.ctx);
+            const sx = g.x - this.worldX + screenCX;
+            const sy = g.y - this.worldY + screenCY;
+            if (sx >= -margin && sx <= this.canvas.width + margin && sy >= -margin && sy <= this.canvas.height + margin) {
+                g.draw(this.ctx);
+            }
         });
         
         this.enemies.forEach(e => {
-            if (e.x >= minX && e.x <= maxX && e.y >= minY && e.y <= maxY) e.draw(this.ctx);
+            const sx = e.x - this.worldX + screenCX;
+            const sy = e.y - this.worldY + screenCY;
+            if (sx >= -margin && sx <= this.canvas.width + margin && sy >= -margin && sy <= this.canvas.height + margin) {
+                e.draw(this.ctx);
+            }
         });
         
         this.bullets.forEach(b => {
-            if (b.x >= minX && b.x <= maxX && b.y >= minY && b.y <= maxY) b.draw(this.ctx);
+            const sx = b.x - this.worldX + screenCX;
+            const sy = b.y - this.worldY + screenCY;
+            if (sx >= -margin && sx <= this.canvas.width + margin && sy >= -margin && sy <= this.canvas.height + margin) {
+                b.draw(this.ctx);
+            }
         });
         
-        this.ctx.restore();
-        
-        // 玩家（屏幕中央）
+        // 玩家（固定在屏幕中央）
         this.ctx.beginPath();
-        this.ctx.arc(this.player.x, this.player.y, this.player.radius, 0, Math.PI * 2);
+        this.ctx.arc(screenCX, screenCY, this.player.radius, 0, Math.PI * 2);
         this.ctx.fillStyle = '#4CAF50';
         this.ctx.fill();
         this.ctx.strokeStyle = '#2E7D32';
