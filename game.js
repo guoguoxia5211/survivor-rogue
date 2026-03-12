@@ -159,6 +159,11 @@ class Game {
         this.width = 400;
         this.height = 700;
         
+        // 无缝地图 - 世界坐标
+        this.worldX = 0;
+        this.worldY = 0;
+        this.distance = 0; // 移动总距离
+        
         this.player = null;
         this.enemies = [];
         this.projectiles = [];
@@ -237,7 +242,7 @@ class Game {
     
     start() {
         this.player = {
-            x: this.width / 2,
+            x: this.width / 2,  // 固定在屏幕中央
             y: this.height / 2,
             radius: 18,
             speed: 3,
@@ -249,6 +254,10 @@ class Game {
             pickupRange: 80,
             regen: 0
         };
+        
+        this.worldX = 0;
+        this.worldY = 0;
+        this.distance = 0;
         
         this.enemies = [];
         this.projectiles = [];
@@ -279,25 +288,21 @@ class Game {
     
     spawnEnemy() {
         const elapsed = (Date.now() - this.startTime) / 1000;
-        const spawnRate = Math.max(20, 60 - elapsed * 2);
+        const spawnRate = Math.max(15, 50 - elapsed * 1.5);
         
         if (Math.random() < 1 / spawnRate) {
-            const side = Math.floor(Math.random() * 4);
-            let x, y;
-            const buffer = 50;
+            // 在世界坐标中生成，围绕玩家
+            const angle = Math.random() * Math.PI * 2;
+            const distance = Math.max(this.width, this.height) / 2 + 50 + Math.random() * 100;
             
-            switch(side) {
-                case 0: x = Math.random() * this.width; y = -buffer; break;
-                case 1: x = this.width + buffer; y = Math.random() * this.height; break;
-                case 2: x = Math.random() * this.width; y = this.height + buffer; break;
-                case 3: x = -buffer; y = Math.random() * this.height; break;
-            }
+            const worldX = this.worldX + Math.cos(angle) * distance;
+            const worldY = this.worldY + Math.sin(angle) * distance;
             
             let type = 'basic';
             if (elapsed > 120 && Math.random() < 0.05) type = 'boss';
-            else if (elapsed > 60 && Math.random() < 0.2) type = Math.random() < 0.5 ? 'fast' : 'tank';
+            else if (elapsed > 60 && Math.random() < 0.25) type = Math.random() < 0.5 ? 'fast' : 'tank';
             
-            this.enemies.push(new Enemy(x, y, type));
+            this.enemies.push(new Enemy(worldX, worldY, type));
         }
     }
     
@@ -460,15 +465,17 @@ class Game {
         
         const elapsed = (Date.now() - this.startTime) / 1000;
         
-        // 玩家移动
+        // 玩家移动 - 更新世界坐标，玩家屏幕位置不变
         if (this.joystick.active && this.joystick.power > 0) {
-            this.player.x += Math.cos(this.joystick.angle) * this.player.speed * this.joystick.power;
-            this.player.y += Math.sin(this.joystick.angle) * this.player.speed * this.joystick.power;
-            this.player.x = Math.max(this.player.radius, Math.min(this.width - this.player.radius, this.player.x));
-            this.player.y = Math.max(this.player.radius, Math.min(this.height - this.player.radius, this.player.y));
+            const moveX = Math.cos(this.joystick.angle) * this.player.speed * this.joystick.power;
+            const moveY = Math.sin(this.joystick.angle) * this.player.speed * this.joystick.power;
+            
+            this.worldX += moveX;
+            this.worldY += moveY;
+            this.distance += Math.sqrt(moveX * moveX + moveY * moveY);
         }
         
-        // 自动攻击
+        // 自动攻击 - 使用世界坐标
         this.skills.forEach(skillId => this.attack(skillId));
         
         // 生命恢复
@@ -477,18 +484,30 @@ class Game {
             this.lastRegen = Date.now();
         }
         
-        // 更新实体
+        // 更新投射物（世界坐标）
         this.projectiles.forEach(p => p.update());
+        
+        // 更新敌人 - 向世界坐标的玩家移动
         this.enemies.forEach((enemy, ei) => {
-            const hitPlayer = enemy.update(this.player);
-            if (hitPlayer) {
+            // 敌人向玩家的世界坐标移动
+            const dx = this.worldX - enemy.x;
+            const dy = this.worldY - enemy.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (dist > 0) {
+                enemy.x += (dx / dist) * enemy.speed;
+                enemy.y += (dy / dist) * enemy.speed;
+            }
+            
+            // 检测碰撞
+            if (dist < enemy.radius + this.player.radius) {
                 let damage = enemy.damage * (1 - this.player.damageReduction);
                 this.player.hp -= damage;
                 if (this.player.hp <= 0) this.endGame();
             }
         });
         
-        // 碰撞检测
+        // 碰撞检测（世界坐标）
         this.projectiles.forEach(proj => {
             if (!proj.active) return;
             this.enemies.forEach(enemy => {
@@ -525,7 +544,22 @@ class Game {
             });
         });
         
-        this.gems.forEach(gem => gem.update(this.player, this.player.pickupRange));
+        // 更新宝石（世界坐标）
+        this.gems.forEach(gem => {
+            const dx = this.worldX - gem.x;
+            const dy = this.worldY - gem.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (dist < this.player.pickupRange) {
+                gem.x += (dx / dist) * 10;
+                gem.y += (dy / dist) * 10;
+            }
+            
+            if (dist < this.player.radius + gem.radius) {
+                this.addExp(gem.value);
+                gem.active = false;
+            }
+        });
         
         // 清理
         this.projectiles = this.projectiles.filter(p => p.active);
@@ -562,6 +596,12 @@ class Game {
         const expPct = (this.exp / this.expToNext) * 100;
         document.getElementById('expFill').style.width = expPct + '%';
         document.getElementById('expText').textContent = `${this.exp}/${this.expToNext}`;
+        
+        // 显示移动距离
+        const distanceMeters = Math.floor(this.distance / 10);
+        if (distanceMeters > 0) {
+            document.getElementById('kills').textContent = `${this.kills} | ${distanceMeters}m`;
+        }
     }
     
     endGame() {
@@ -588,20 +628,49 @@ class Game {
         this.ctx.fillStyle = '#1a1a2e';
         this.ctx.fillRect(0, 0, this.width, this.height);
         
-        // 网格
+        // 绘制移动网格（显示移动感）
+        const gridOffset = (this.worldX + this.worldY) % 40;
         this.ctx.strokeStyle = '#2a2a4e';
         this.ctx.lineWidth = 1;
-        for (let x = 0; x < this.width; x += 40) {
+        for (let x = gridOffset; x < this.width; x += 40) {
             this.ctx.beginPath(); this.ctx.moveTo(x, 0); this.ctx.lineTo(x, this.height); this.ctx.stroke();
         }
-        for (let y = 0; y < this.height; y += 40) {
+        for (let y = gridOffset; y < this.height; y += 40) {
             this.ctx.beginPath(); this.ctx.moveTo(0, y); this.ctx.lineTo(this.width, y); this.ctx.stroke();
         }
         
-        this.gems.forEach(g => g.draw(this.ctx));
-        this.enemies.forEach(e => e.draw(this.ctx));
+        // 绘制实体 - 转换为屏幕坐标
+        this.ctx.save();
+        this.ctx.translate(this.width/2 - this.worldX, this.height/2 - this.worldY);
         
-        // 玩家
+        // 只绘制屏幕内的实体（优化）
+        const viewMargin = 100;
+        const minX = this.worldX - this.width/2 - viewMargin;
+        const maxX = this.worldX + this.width/2 + viewMargin;
+        const minY = this.worldY - this.height/2 - viewMargin;
+        const maxY = this.worldY + this.height/2 + viewMargin;
+        
+        this.gems.forEach(g => {
+            if (g.x >= minX && g.x <= maxX && g.y >= minY && g.y <= maxY) {
+                g.draw(this.ctx);
+            }
+        });
+        
+        this.enemies.forEach(e => {
+            if (e.x >= minX && e.x <= maxX && e.y >= minY && e.y <= maxY) {
+                e.draw(this.ctx);
+            }
+        });
+        
+        this.projectiles.forEach(p => {
+            if (p.x >= minX && p.x <= maxX && p.y >= minY && p.y <= maxY) {
+                p.draw(this.ctx);
+            }
+        });
+        
+        this.ctx.restore();
+        
+        // 玩家固定在屏幕中央
         this.ctx.beginPath();
         this.ctx.arc(this.player.x, this.player.y, this.player.radius, 0, Math.PI * 2);
         this.ctx.fillStyle = '#4CAF50';
@@ -609,8 +678,6 @@ class Game {
         this.ctx.strokeStyle = '#2E7D32';
         this.ctx.lineWidth = 3;
         this.ctx.stroke();
-        
-        this.projectiles.forEach(p => p.draw(this.ctx));
     }
 }
 
