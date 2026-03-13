@@ -67,31 +67,41 @@ class Game {
         const joystick = document.getElementById('joystick');
         const knob = document.getElementById('joystickKnob');
         let touchId = null;
-        let rect = joystick.getBoundingClientRect();
-        let centerX = rect.left + rect.width / 2;
-        let centerY = rect.top + rect.height / 2;
+        
+        // 获取摇杆中心
+        const updateCenter = () => {
+            const rect = joystick.getBoundingClientRect();
+            return {
+                centerX: rect.left + rect.width / 2,
+                centerY: rect.top + rect.height / 2
+            };
+        };
         
         joystick.addEventListener('touchstart', e => {
             e.preventDefault();
             const touch = e.changedTouches[0];
             touchId = touch.identifier;
-            rect = joystick.getBoundingClientRect();
-            centerX = rect.left + rect.width / 2;
-            centerY = rect.top + rect.height / 2;
+            const { centerX, centerY } = updateCenter();
             this.joystick.active = true;
+            console.log('摇杆触摸开始');
         }, { passive: false });
         
         joystick.addEventListener('touchmove', e => {
             e.preventDefault();
             if (!this.joystick.active) return;
+            
             for (let i = 0; i < e.changedTouches.length; i++) {
                 if (e.changedTouches[i].identifier === touchId) {
                     const touch = e.changedTouches[i];
+                    const { centerX, centerY } = updateCenter();
                     const dx = touch.clientX - centerX;
                     const dy = touch.clientY - centerY;
                     const dist = Math.min(40, Math.sqrt(dx * dx + dy * dy));
                     this.joystick.angle = Math.atan2(dy, dx);
                     this.joystick.power = dist / 40;
+                    
+                    console.log('摇杆移动:', this.joystick.angle, this.joystick.power);
+                    
                     knob.style.transform = `translate(-50%, -50%) translate(${Math.cos(this.joystick.angle) * dist}px, ${Math.sin(this.joystick.angle) * dist}px)`;
                 }
             }
@@ -102,6 +112,7 @@ class Game {
             this.joystick.active = false;
             this.joystick.power = 0;
             knob.style.transform = 'translate(-50%, -50%)';
+            console.log('摇杆触摸结束');
         });
         
         window.addEventListener('resize', () => this.resize());
@@ -149,9 +160,14 @@ class Game {
         const angle = Math.random() * Math.PI * 2;
         const distance = Math.max(this.canvas.width, this.canvas.height) / 2 + 50;
         
+        const enemyX = this.player.x + Math.cos(angle) * distance;
+        const enemyY = this.player.y + Math.sin(angle) * distance;
+        
+        console.log('生成敌人:', enemyX, enemyY, '敌人数量:', this.enemies.length + 1);
+        
         this.enemies.push({
-            x: this.player.x + Math.cos(angle) * distance,
-            y: this.player.y + Math.sin(angle) * distance,
+            x: enemyX,
+            y: enemyY,
             hp: 30 + this.player.level * 5,
             maxHp: 30 + this.player.level * 5,
             speed: CONFIG.enemySpeed,
@@ -203,10 +219,14 @@ class Game {
         if (!this.isPlaying || !this.player) return;
         
         // 玩家移动
-        if (this.joystick.active && this.joystick.power > 0.1) {
-            this.player.x += Math.cos(this.joystick.angle) * CONFIG.playerSpeed * this.joystick.power;
-            this.player.y += Math.sin(this.joystick.angle) * CONFIG.playerSpeed * this.joystick.power;
+        if (this.joystick.active && this.joystick.power > 0.05) {
+            const moveX = Math.cos(this.joystick.angle) * CONFIG.playerSpeed * this.joystick.power;
+            const moveY = Math.sin(this.joystick.angle) * CONFIG.playerSpeed * this.joystick.power;
             
+            this.player.x += moveX;
+            this.player.y += moveY;
+            
+            // 边界限制
             this.player.x = Math.max(CONFIG.playerRadius, Math.min(this.canvas.width - CONFIG.playerRadius, this.player.x));
             this.player.y = Math.max(CONFIG.playerRadius, Math.min(this.canvas.height - CONFIG.playerRadius, this.player.y));
         }
