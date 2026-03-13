@@ -83,12 +83,15 @@ class Game {
             touchId = touch.identifier;
             const { centerX, centerY } = updateCenter();
             this.joystick.active = true;
-            console.log('摇杆触摸开始');
+            console.log('🕹️ 摇杆触摸开始！active =', this.joystick.active);
         }, { passive: false });
         
         joystick.addEventListener('touchmove', e => {
             e.preventDefault();
-            if (!this.joystick.active) return;
+            if (!this.joystick.active) {
+                console.log('⚠️ 摇杆未激活，跳过 touchmove');
+                return;
+            }
             
             for (let i = 0; i < e.changedTouches.length; i++) {
                 if (e.changedTouches[i].identifier === touchId) {
@@ -100,7 +103,7 @@ class Game {
                     this.joystick.angle = Math.atan2(dy, dx);
                     this.joystick.power = dist / 40;
                     
-                    console.log('摇杆移动:', this.joystick.angle, this.joystick.power);
+                    console.log('🕹️ 摇杆移动！power =', this.joystick.power, 'angle =', this.joystick.angle);
                     
                     knob.style.transform = `translate(-50%, -50%) translate(${Math.cos(this.joystick.angle) * dist}px, ${Math.sin(this.joystick.angle) * dist}px)`;
                 }
@@ -216,25 +219,27 @@ class Game {
     }
     
     update() {
-        if (!this.isPlaying || !this.player) return;
+        if (!this.player) return;
         
-        // 玩家移动
-        if (this.joystick.active && this.joystick.power > 0.05) {
-            const moveX = Math.cos(this.joystick.angle) * CONFIG.playerSpeed * this.joystick.power;
-            const moveY = Math.sin(this.joystick.angle) * CONFIG.playerSpeed * this.joystick.power;
-            
-            this.player.x += moveX;
-            this.player.y += moveY;
-            
-            // 边界限制
-            this.player.x = Math.max(CONFIG.playerRadius, Math.min(this.canvas.width - CONFIG.playerRadius, this.player.x));
-            this.player.y = Math.max(CONFIG.playerRadius, Math.min(this.canvas.height - CONFIG.playerRadius, this.player.y));
+        // 玩家移动 - 始终可以移动
+        if (this.joystick.active) {
+            if (this.joystick.power > 0.05) {
+                const moveX = Math.cos(this.joystick.angle) * CONFIG.playerSpeed * this.joystick.power;
+                const moveY = Math.sin(this.joystick.angle) * CONFIG.playerSpeed * this.joystick.power;
+                
+                this.player.x += moveX;
+                this.player.y += moveY;
+                
+                // 边界限制
+                this.player.x = Math.max(CONFIG.playerRadius, Math.min(this.canvas.width - CONFIG.playerRadius, this.player.x));
+                this.player.y = Math.max(CONFIG.playerRadius, Math.min(this.canvas.height - CONFIG.playerRadius, this.player.y));
+            }
         }
         
-        // 自动攻击
+        // 自动攻击 - 每 400ms
         this.attack();
         
-        // 生成敌人
+        // 生成敌人 - 每 1000ms
         this.spawnEnemy();
         
         // 更新子弹
