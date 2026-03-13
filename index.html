@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>勇者幸存者 v3.0.4</title>
+    <title>勇者幸存者 v3.0.5</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-user-select: none; touch-action: none; }
         body { background: #000; overflow: hidden; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
@@ -35,7 +35,7 @@
         .big-btn { background: linear-gradient(180deg, #4CAF50, #45a049); color: #fff; border: none; padding: 18px 50px; font-size: 20px; border-radius: 30px; cursor: pointer; margin: 10px; box-shadow: 0 4px 20px rgba(76,175,80,0.4); }
         .big-btn:active { transform: scale(0.95); }
         
-        #joystick { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: 120px; height: 120px; background: rgba(255,255,255,0.1); border-radius: 50%; z-index: 200; touch-action: none; }
+        #joystick { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: 120px; height: 120px; background: rgba(255,255,255,0.2); border-radius: 50%; z-index: 1000; touch-action: none; border: 2px solid rgba(255,255,255,0.3); }
         #joystickKnob { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 50px; height: 50px; background: rgba(255,255,255,0.3); border-radius: 50%; }
         
         #message { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.9); color: #fff; padding: 20px 30px; border-radius: 15px; font-size: 18px; z-index: 400; display: none; text-align: center; }
@@ -66,7 +66,7 @@
         
         <div id="startScreen">
             <h1>🗡️ 勇者幸存者</h1>
-            <p class="subtitle">Survivor Roguelike v3.0.1</p>
+            <p class="subtitle">Survivor Roguelike v3.0.5</p>
             <button class="big-btn" onclick="game.start()">开始游戏</button>
             <p style="color: #666; margin-top: 20px; font-size: 13px;">左摇杆移动 · 自动攻击</p>
         </div>
