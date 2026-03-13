@@ -1,9 +1,8 @@
 /**
- * 🗡️ 勇者幸存者 v3.0.0
- * 完整重做版 - 确保能玩
+ * 🗡️ 勇者幸存者 v3.0.1
+ * 修复渲染问题
  */
 
-// ==================== 游戏配置 ====================
 const CONFIG = {
     playerSpeed: 3,
     playerRadius: 20,
@@ -15,61 +14,40 @@ const CONFIG = {
     spawnInterval: 1000
 };
 
-// ==================== 游戏主类 ====================
 class Game {
     constructor() {
         this.canvas = document.getElementById('gameCanvas');
         this.ctx = this.canvas.getContext('2d');
         this.resize();
         
-        // 游戏状态
-        this.state = 'menu'; // menu, playing, gameover
-        this.lastTime = 0;
+        this.isPlaying = false;
+        this.startTime = 0;
+        this.lastTime = Date.now();
         
-        // 玩家
-        this.player = {
-            x: this.canvas.width / 2,
-            y: this.canvas.height / 2,
-            hp: 100,
-            maxHp: 100,
-            level: 1,
-            exp: 0,
-            expToNext: 20,
-            kills: 0
-        };
-        
-        // 游戏对象
+        this.player = null;
         this.bullets = [];
         this.enemies = [];
         this.gems = [];
         this.damageNumbers = [];
         
-        // 计时器
         this.lastAttack = 0;
         this.lastSpawn = 0;
         
-        // 摇杆
-        this.joystick = {
-            active: false,
-            dx: 0,
-            dy: 0,
-            distance: 0,
-            angle: 0
-        };
+        this.joystick = { active: false, angle: 0, power: 0 };
         
         this.setupInput();
+        
+        // 立即开始渲染
         this.loop = this.loop.bind(this);
         requestAnimationFrame(this.loop);
+        
+        console.log('🗡️ 游戏已加载，点击开始游戏');
     }
     
     resize() {
         const container = document.getElementById('gameContainer');
         this.canvas.width = container.clientWidth;
         this.canvas.height = container.clientHeight;
-        if (this.player) {
-            this.player.x = this.canvas.width / 2;
-            this.player.y = this.canvas.height / 2;
-        }
     }
     
     setupInput() {
@@ -96,12 +74,12 @@ class Game {
             for (let i = 0; i < e.changedTouches.length; i++) {
                 if (e.changedTouches[i].identifier === touchId) {
                     const touch = e.changedTouches[i];
-                    this.joystick.dx = touch.clientX - centerX;
-                    this.joystick.dy = touch.clientY - centerY;
-                    this.joystick.distance = Math.min(40, Math.sqrt(this.joystick.dx ** 2 + this.joystick.dy ** 2));
-                    this.joystick.angle = Math.atan2(this.joystick.dy, this.joystick.dx);
-                    
-                    knob.style.transform = `translate(-50%, -50%) translate(${Math.cos(this.joystick.angle) * this.joystick.distance}px, ${Math.sin(this.joystick.angle) * this.joystick.distance}px)`;
+                    const dx = touch.clientX - centerX;
+                    const dy = touch.clientY - centerY;
+                    const dist = Math.min(40, Math.sqrt(dx * dx + dy * dy));
+                    this.joystick.angle = Math.atan2(dy, dx);
+                    this.joystick.power = dist / 40;
+                    knob.style.transform = `translate(-50%, -50%) translate(${Math.cos(this.joystick.angle) * dist}px, ${Math.sin(this.joystick.angle) * dist}px)`;
                 }
             }
         }, { passive: false });
@@ -109,9 +87,7 @@ class Game {
         joystick.addEventListener('touchend', e => {
             e.preventDefault();
             this.joystick.active = false;
-            this.joystick.dx = 0;
-            this.joystick.dy = 0;
-            this.joystick.distance = 0;
+            this.joystick.power = 0;
             knob.style.transform = 'translate(-50%, -50%)';
         });
         
@@ -119,7 +95,8 @@ class Game {
     }
     
     start() {
-        this.state = 'playing';
+        console.log('游戏开始！');
+        this.isPlaying = true;
         this.startTime = Date.now();
         this.lastTime = Date.now();
         
@@ -150,11 +127,10 @@ class Game {
         if (now - this.lastSpawn < CONFIG.spawnInterval) return;
         this.lastSpawn = now;
         
-        // 在屏幕外随机位置生成
         const angle = Math.random() * Math.PI * 2;
         const distance = Math.max(this.canvas.width, this.canvas.height) / 2 + 50;
         
-        const enemy = {
+        this.enemies.push({
             x: this.player.x + Math.cos(angle) * distance,
             y: this.player.y + Math.sin(angle) * distance,
             hp: 30 + this.player.level * 5,
@@ -163,9 +139,7 @@ class Game {
             damage: 10,
             exp: 10,
             radius: CONFIG.enemyRadius
-        };
-        
-        this.enemies.push(enemy);
+        });
     }
     
     attack() {
@@ -173,7 +147,6 @@ class Game {
         if (now - this.lastAttack < CONFIG.attackCooldown) return;
         this.lastAttack = now;
         
-        // 找最近的敌人
         let target = null;
         let minDist = 400 * 400;
         
@@ -187,7 +160,6 @@ class Game {
             }
         }
         
-        // 计算发射角度
         let angle;
         if (target) {
             angle = Math.atan2(target.y - this.player.y, target.x - this.player.x);
@@ -195,7 +167,6 @@ class Game {
             angle = Math.random() * Math.PI * 2;
         }
         
-        // 发射子弹
         this.bullets.push({
             x: this.player.x,
             y: this.player.y,
@@ -205,19 +176,18 @@ class Game {
             radius: CONFIG.bulletRadius,
             life: 150
         });
+        
+        console.log('发射子弹！', this.bullets.length);
     }
     
     update() {
-        if (this.state !== 'playing') return;
-        
-        const now = Date.now();
+        if (!this.isPlaying || !this.player) return;
         
         // 玩家移动
-        if (this.joystick.active && this.joystick.distance > 5) {
-            this.player.x += Math.cos(this.joystick.angle) * CONFIG.playerSpeed * (this.joystick.distance / 40);
-            this.player.y += Math.sin(this.joystick.angle) * CONFIG.playerSpeed * (this.joystick.distance / 40);
+        if (this.joystick.active && this.joystick.power > 0.1) {
+            this.player.x += Math.cos(this.joystick.angle) * CONFIG.playerSpeed * this.joystick.power;
+            this.player.y += Math.sin(this.joystick.angle) * CONFIG.playerSpeed * this.joystick.power;
             
-            // 边界限制
             this.player.x = Math.max(CONFIG.playerRadius, Math.min(this.canvas.width - CONFIG.playerRadius, this.player.x));
             this.player.y = Math.max(CONFIG.playerRadius, Math.min(this.canvas.height - CONFIG.playerRadius, this.player.y));
         }
@@ -235,7 +205,6 @@ class Game {
             bullet.y += bullet.vy;
             bullet.life--;
             
-            // 边界检查
             if (bullet.x < 0 || bullet.x > this.canvas.width || 
                 bullet.y < 0 || bullet.y > this.canvas.height || bullet.life <= 0) {
                 this.bullets.splice(i, 1);
@@ -254,7 +223,6 @@ class Game {
                 enemy.y += (dy / dist) * enemy.speed;
             }
             
-            // 碰撞玩家
             if (dist < CONFIG.playerRadius + enemy.radius) {
                 this.player.hp -= enemy.damage;
                 if (this.player.hp <= 0) {
@@ -263,7 +231,7 @@ class Game {
             }
         }
         
-        // 子弹碰撞敌人
+        // 子弹碰撞
         for (let i = this.bullets.length - 1; i >= 0; i--) {
             const bullet = this.bullets[i];
             for (let j = this.enemies.length - 1; j >= 0; j--) {
@@ -276,28 +244,19 @@ class Game {
                     enemy.hp -= bullet.damage;
                     this.bullets.splice(i, 1);
                     
-                    // 显示伤害数字
-                    this.damageNumbers.push({
-                        x: enemy.x,
-                        y: enemy.y,
-                        value: bullet.damage,
-                        life: 30
-                    });
+                    this.damageNumbers.push({ x: enemy.x, y: enemy.y, value: bullet.damage, life: 30 });
                     
                     if (enemy.hp <= 0) {
                         this.player.kills++;
                         this.player.exp += enemy.exp;
-                        this.gems.push({ x: enemy.x, y: enemy.y, value: enemy.exp, radius: 6 });
                         this.enemies.splice(j, 1);
                         
-                        // 升级
                         if (this.player.exp >= this.player.expToNext) {
                             this.player.exp -= this.player.expToNext;
                             this.player.level++;
                             this.player.expToNext = Math.floor(this.player.expToNext * 1.3);
                             this.player.maxHp += 20;
                             this.player.hp = this.player.maxHp;
-                            this.showLevelUp();
                         }
                     }
                     break;
@@ -327,12 +286,11 @@ class Game {
                     this.player.expToNext = Math.floor(this.player.expToNext * 1.3);
                     this.player.maxHp += 20;
                     this.player.hp = this.player.maxHp;
-                    this.showLevelUp();
                 }
             }
         }
         
-        // 更新伤害数字
+        // 伤害数字
         for (let i = this.damageNumbers.length - 1; i >= 0; i--) {
             this.damageNumbers[i].y -= 1;
             this.damageNumbers[i].life--;
@@ -344,11 +302,8 @@ class Game {
         this.updateUI();
     }
     
-    showLevelUp() {
-        // 简化：升级时回满血
-    }
-    
     updateUI() {
+        if (!this.player) return;
         document.getElementById('hp').textContent = Math.floor(this.player.hp);
         document.getElementById('level').textContent = this.player.level;
         document.getElementById('kills').textContent = this.player.kills;
@@ -365,7 +320,7 @@ class Game {
     }
     
     gameOver() {
-        this.state = 'gameover';
+        this.isPlaying = false;
         const elapsed = Math.floor((Date.now() - this.startTime) / 1000);
         const mins = Math.floor(elapsed / 60);
         const secs = elapsed % 60;
@@ -374,13 +329,27 @@ class Game {
     }
     
     render() {
-        // 清空
+        // 背景
         this.ctx.fillStyle = '#1a1a2e';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         
-        if (this.state !== 'playing') return;
+        // 网格背景
+        this.ctx.strokeStyle = '#2a2a4e';
+        this.ctx.lineWidth = 1;
+        for (let x = 0; x < this.canvas.width; x += 50) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(x, 0);
+            this.ctx.lineTo(x, this.canvas.height);
+            this.ctx.stroke();
+        }
+        for (let y = 0; y < this.canvas.height; y += 50) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, y);
+            this.ctx.lineTo(this.canvas.width, y);
+            this.ctx.stroke();
+        }
         
-        // 绘制宝石
+        // 宝石
         for (let gem of this.gems) {
             this.ctx.beginPath();
             this.ctx.arc(gem.x, gem.y, gem.radius, 0, Math.PI * 2);
@@ -391,7 +360,7 @@ class Game {
             this.ctx.stroke();
         }
         
-        // 绘制敌人
+        // 敌人
         for (let enemy of this.enemies) {
             this.ctx.beginPath();
             this.ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI * 2);
@@ -401,7 +370,6 @@ class Game {
             this.ctx.lineWidth = 2;
             this.ctx.stroke();
             
-            // 敌人血条
             const hpPct = enemy.hp / enemy.maxHp;
             this.ctx.fillStyle = '#333';
             this.ctx.fillRect(enemy.x - 12, enemy.y - enemy.radius - 6, 24, 3);
@@ -409,7 +377,7 @@ class Game {
             this.ctx.fillRect(enemy.x - 12, enemy.y - enemy.radius - 6, 24 * hpPct, 3);
         }
         
-        // 绘制子弹
+        // 子弹
         for (let bullet of this.bullets) {
             this.ctx.beginPath();
             this.ctx.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2);
@@ -420,16 +388,18 @@ class Game {
             this.ctx.stroke();
         }
         
-        // 绘制玩家
-        this.ctx.beginPath();
-        this.ctx.arc(this.player.x, this.player.y, CONFIG.playerRadius, 0, Math.PI * 2);
-        this.ctx.fillStyle = '#4CAF50';
-        this.ctx.fill();
-        this.ctx.strokeStyle = '#2E7D32';
-        this.ctx.lineWidth = 3;
-        this.ctx.stroke();
+        // 玩家
+        if (this.player) {
+            this.ctx.beginPath();
+            this.ctx.arc(this.player.x, this.player.y, CONFIG.playerRadius, 0, Math.PI * 2);
+            this.ctx.fillStyle = '#4CAF50';
+            this.ctx.fill();
+            this.ctx.strokeStyle = '#2E7D32';
+            this.ctx.lineWidth = 3;
+            this.ctx.stroke();
+        }
         
-        // 绘制伤害数字
+        // 伤害数字
         this.ctx.font = 'bold 16px Arial';
         for (let dn of this.damageNumbers) {
             this.ctx.fillStyle = '#FF5252';
@@ -442,10 +412,9 @@ class Game {
     
     loop() {
         const now = Date.now();
-        const dt = now - this.lastTime;
         this.lastTime = now;
         
-        if (this.state === 'playing') {
+        if (this.isPlaying) {
             this.update();
         }
         this.render();
@@ -454,9 +423,8 @@ class Game {
     }
 }
 
-// ==================== 初始化 ====================
-let game;
+// 启动
 window.onload = () => {
-    game = new Game();
-    console.log('🗡️ 勇者幸存者 v3.0.0 启动');
+    window.game = new Game();
+    console.log('🗡️ 勇者幸存者 v3.0.1 启动完成');
 };
