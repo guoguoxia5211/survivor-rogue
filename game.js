@@ -20,11 +20,24 @@ class Game {
         this.ctx = this.canvas.getContext('2d');
         this.resize();
         
+        console.log('画布初始化:', this.canvas.width, 'x', this.canvas.height);
+        
         this.isPlaying = false;
         this.startTime = 0;
         this.lastTime = Date.now();
         
-        this.player = null;
+        // 预先创建玩家（用于测试显示）
+        this.player = {
+            x: this.canvas.width / 2,
+            y: this.canvas.height / 2,
+            hp: 100,
+            maxHp: 100,
+            level: 1,
+            exp: 0,
+            expToNext: 20,
+            kills: 0
+        };
+        console.log('初始玩家位置:', this.player.x, this.player.y);
         this.bullets = [];
         this.enemies = [];
         this.gems = [];
@@ -95,14 +108,18 @@ class Game {
     }
     
     start() {
-        console.log('游戏开始！');
+        console.log('游戏开始！画布尺寸:', this.canvas.width, 'x', this.canvas.height);
         this.isPlaying = true;
         this.startTime = Date.now();
         this.lastTime = Date.now();
         
+        const centerX = this.canvas.width / 2;
+        const centerY = this.canvas.height / 2;
+        console.log('创建玩家在:', centerX, centerY);
+        
         this.player = {
-            x: this.canvas.width / 2,
-            y: this.canvas.height / 2,
+            x: centerX,
+            y: centerY,
             hp: 100,
             maxHp: 100,
             level: 1,
@@ -110,6 +127,8 @@ class Game {
             expToNext: 20,
             kills: 0
         };
+        
+        console.log('玩家对象:', this.player);
         
         this.bullets = [];
         this.enemies = [];
@@ -388,15 +407,25 @@ class Game {
             this.ctx.stroke();
         }
         
-        // 玩家
+        // 玩家 - 始终绘制
         if (this.player) {
+            console.log('绘制玩家在:', this.player.x, this.player.y);
             this.ctx.beginPath();
             this.ctx.arc(this.player.x, this.player.y, CONFIG.playerRadius, 0, Math.PI * 2);
             this.ctx.fillStyle = '#4CAF50';
             this.ctx.fill();
-            this.ctx.strokeStyle = '#2E7D32';
-            this.ctx.lineWidth = 3;
+            this.ctx.strokeStyle = '#FFFFFF';
+            this.ctx.lineWidth = 4;
             this.ctx.stroke();
+            
+            // 玩家血条
+            const hpPct = this.player.hp / this.player.maxHp;
+            this.ctx.fillStyle = '#333';
+            this.ctx.fillRect(this.player.x - 20, this.player.y - 35, 40, 6);
+            this.ctx.fillStyle = hpPct > 0.5 ? '#4CAF50' : '#F44336';
+            this.ctx.fillRect(this.player.x - 20, this.player.y - 35, 40 * hpPct, 6);
+        } else {
+            console.log('玩家不存在！');
         }
         
         // 伤害数字
